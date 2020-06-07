@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:azure-storage="http://www.mulesoft.org/schema/mule/azure-storage" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:mongo="http://www.mulesoft.org/schema/mule/mongo" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/azure-storage http://www.mulesoft.org/schema/mule/azure-storage/current/mule-azure-storage.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/mongo http://www.mulesoft.org/schema/mule/mongo/current/mule-mongo.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+	<azure-storage:configuration name="Azure_Storage__Azure_Configuration" accountName="ABC" accountKey="JGSDFKJASDBKVABSDKJVBASKLVJBpg==" doc:name="Azure Storage: Azure Configuration"/>
+	<file:connector name="File" autoDelete="true" streaming="true" validateConnections="true" doc:name="File"/>
+	<flow name="azureFlow">
+		<http:listener config-ref="HTTP_Listener_Configuration" path="/api" doc:name="HTTP"/>
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	container: "process",
+	fileName: "bson_bytes.bson"
+} as :object {
+	class : "org.mule.modules.azurestorageservice.inputentity.Blob"
+}]]></dw:set-payload>
+		</dw:transform-message>
+		<azure-storage:download-blob config-ref="Azure_Storage__Azure_Configuration" doc:name="Azure Storage"/>
+		<expression-component doc:name="Expression"><![CDATA[import org.bson.BasicBSONDecoder;
+import org.bson.BSONObject;
+
+BasicBSONDecoder decoder = new BasicBSONDecoder();
+BSONObject bsonObject = decoder.readObject(payload);
+String json_string = bsonObject.toString();
+flowVars.string =json_string;]]></expression-component>
+		<dw:transform-message doc:name="Transform Message" metadata:id="f49da66d-ab92-4873-938c-3bfecd957f68">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+read(flowVars.string,"application/json")]]></dw:set-payload>
+		</dw:transform-message>
+		<dw:transform-message doc:name="Transform Message" metadata:id="a096cdd7-63da-4149-9d3c-152aabca605f">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/csv 
+---
+payload
+]]></dw:set-payload>
+		</dw:transform-message>
+		<file:outbound-endpoint path="C:/Users/rakeshg679/AnypointStudio/workspace/azure/src/main" outputPattern="result.xls" connector-ref="File" responseTimeout="10000" doc:name="File"/>
+		<dw:transform-message doc:name="Transform Message" metadata:id="e8ee6064-a21e-4cd8-ae5f-ca893a5ea34a">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	container: "process",
+	fileName: "result.xls",
+	
+	filepath: "C:/Users/rakeshg679/AnypointStudio/workspace/azure/src/main/result.xlxs"
+
+} as :object {
+	class : "org.mule.modules.azurestorageservice.inputentity.BlobByPath"
+}]]></dw:set-payload>
+		</dw:transform-message>
+		<azure-storage:upload-blob-from-path config-ref="Azure_Storage__Azure_Configuration" doc:name="Azure Storage"/>
+	</flow>
+</mule>
